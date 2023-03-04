@@ -9,6 +9,7 @@ Trash Robot Trash Classification Segmentation AI
 #Standard Libraries
 import os
 import cv2
+import json
 
 #AI Libraries
 import pandas as pd
@@ -36,8 +37,17 @@ def getData():
     dataY = []
     
     for filename in os.listdir(DATASET_DIR):
-        if (os.path.isdir(os.path.join(DATASET_DIR,filename))):
-            data.append()
+        pathName = os.path.join(DATASET_DIR,filename)
+        
+        if (os.path.isdir(pathName)):
+            dataX.append(loadImgFromFolder(pathName))
+        elif (os.path.isfile(pathName)):
+            if (filename == "annotations.json" or filename == "annotations_unofficial.json"):
+                f = open(pathName)
+                jsonData = json.load(f)
+                
+                
+                
     
     data = [dataX, dataY]
     
