@@ -21,6 +21,8 @@ import keras.layers as layers
 
 DATASET_DIR = "../data"
 
+#Data Fetching ##################################################################
+
 def loadImgFromFolder(path):
     images = [[],[]]
     
@@ -71,12 +73,21 @@ def getData():
     
     return dataX, dataY
 
+#Data Preprocessing #############################################################
+
+def resizeImg(img, targetW, targetH):
+    pass
+
+#Create Machine Learning Model ##################################################
+
 def createModel(inputSize, outputSize):
     model = None
     
     model = keras.Sequential(layers.Conv2D(3, 20, input_shape=inputSize, activation='relu'))
     
     return model
+
+#Main ###########################################################################
 
 cleanUpDatasets()
 dataX, dataY = getData()
@@ -86,3 +97,4 @@ dataX, dataY = getData()
 #     # Ensures that the App processes are safely launched on Windows
 #     session = fo.launch_app(dataY,desktop=True)
 #     session.wait()
+
