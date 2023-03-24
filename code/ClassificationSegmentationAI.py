@@ -13,6 +13,7 @@ import cv2
 import fiftyone as fo #Library read json files in the COCO format
 
 #AI Libraries
+import numpy as np
 import pandas as pd
 import sklearn
 import tensorflow as tf
@@ -75,8 +76,106 @@ def getData():
 
 #Data Preprocessing #############################################################
 
-def resizeImg(img, targetW, targetH):
-    pass
+def resizeImg(img, masks, targetW, targetH):
+    '''
+    Resizes a given image and associated mask to the specified Width and Height
+
+    Parameters
+    ----------
+    img : pandas.Dataframe[[[float]]]
+        The image data to resize
+    masks : pandas.Dataframe[[[float]]]
+        An array of images that contain the mask labels
+    targetW : int
+        The width you want to resize to
+    targetH : int
+        The height you want to resize to
+
+    Returns
+    -------
+    reimg : pandas.Dataframe[[[float]]]
+        The resized image of size [targetW,targetH]
+    remasks : pandas.Dataframe[[[float]]]
+        An array of masks resized to the size [targetW,targetH]
+
+    '''
+    reimg = []
+    remasks = []
+    
+    reimg = tf.image.resize(img, (targetW, targetH), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    
+    for mask in masks:
+        remasks.append(tf.image.resize(mask, (targetW, targetH), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR))
+    
+    return reimg, remasks
+
+def normalize(img):
+    '''
+    Normalize the provided image so its values are between 0 and 1
+
+    Parameters
+    ----------
+    img : pandas.Dataframe[[[float]]]
+        The image to normalize
+
+    Returns
+    -------
+    imgNorm : pandas.Dataframe[[[float]]]
+        The normalized image with values between 0-1
+
+    '''
+    imgNorm = img.copy()
+    
+    imgNorm = imgNorm / 255.0
+    
+    return imgNorm
+
+def normalize_SimpleMask(img, mask):
+    '''
+    Normalizes the data, sets the mask data to either 0 for non-trash and 1 for
+    trash instead of values 1 or greater for different categories of trash
+
+    Parameters
+    ----------
+    img : pandas.Dataframe[[[float]]]
+        The image data to normalize
+    mask : pandas.DataFrame[[int]]
+        The label mask for the image.  Expects only one since it is assumed that
+        categorical classifications are all stored in one mask as values 1 or greater
+
+    Returns
+    -------
+    imgNorm : pandas.Dataframe[[[float]]]
+        The image data as a value between 0 and 1
+    maskNorm : pandas.DataFrame[[int]]
+        The simplified mask data, removing category labels and replacing it 
+        with a trash boolean (1 = trash, 0 = no trash)
+
+    '''
+    imgNorm = img.copy()
+    maskNorm = mask.copy()
+    
+    imgNorm = imgNorm / 255.0   #Divide color values to get value between 0-1
+    maskNorm.clip(upper=1, inplace=True)    #Sets all trash labels to 1 instead of categorical types of trash
+                
+    return imgNorm, maskNorm
+
+def normalize_SingelMask(img, masks):
+    imgNorm = img.copy()
+    maskNorm = pd.DataFrame()
+    
+    imgNorm = imgNorm / 255.0   #Divide color values to get value between 0-1
+    
+    for i in range(masks[0].shape[0]):
+        for j in range(masks[0].shape[1]):
+            maskNorm[i][j] = 0 
+            
+            for mask in masks:
+                if (mask[i][j] > 0):
+                    maskNorm[i][j] = 1
+                    break
+                
+    return imgNorm, maskNorm
 
 #Create Machine Learning Model ##################################################
 
