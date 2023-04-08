@@ -8,7 +8,7 @@ Trash Robot Trash Classification Segmentation AI
 
 #Standard Libraries
 import os
-import cv2
+import cv2 as opencv
 #import json
 import fiftyone as fo #Library read json files in the COCO format
 
@@ -24,17 +24,53 @@ DATASET_DIR = "../data"
 
 #Data Fetching ##################################################################
 
-def loadImgFromFolder(path):
-    images = [[],[]]
+def loadImgInfoFromFolder(path):
+    '''
+    Only loads the image file path into an array so that it may be retrieved
+    When needed.
+    Intended to be used inconjunction with the fiftyone dataset for train-test
+    splitting
+
+    Parameters
+    ----------
+    path : string
+        The file path to the folder
+
+    Returns
+    -------
+    images : [string]
+        A list with all of the images in the folder
+
+    '''
+    images = []
     
     for filename in os.listdir(path):
-        img = cv2.imread(os.path.join(path,filename))
         
-        if img is not None:
-            # images[0].append(img)
-            images[1].append(os.path.join(path,filename))
+        if filename.lower().endswith(('.jpg','.png','.jpeg')):  #Checks if the file is an image
+            images.append(os.path.join(path,filename))
     
     return images
+
+def loadImg(filePath):
+    '''
+    Loads the image data from the file path
+
+    Parameters
+    ----------
+    filePath : string
+        Path to the file
+
+    Returns
+    -------
+    imageData : TYPE
+        DESCRIPTION.
+
+    '''
+    imageData = []
+    
+    imageData = opencv.imread(filePath)
+    
+    return imageData
 
 def cleanUpDatasets():
     '''
@@ -58,7 +94,7 @@ def getData():
         pathName = os.path.join(DATASET_DIR,filename)
         
         if (os.path.isdir(pathName)):
-            dataX.append(loadImgFromFolder(pathName))
+            dataX.append(loadImgInfoFromFolder(pathName))
         elif (os.path.isfile(pathName)):
             if (filename == "annotations.json"): #or filename == "annotations_unofficial.json"):    #We did not download the unofficial data, if we do, uncomment this              
                 #Use fiftyone API to decode json data
