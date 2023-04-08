@@ -62,13 +62,13 @@ def loadImg(filePath):
 
     Returns
     -------
-    imageData : TYPE
-        DESCRIPTION.
+    imageData : pd.DataFrame[[[float]]]
+        The pixel data of the image
 
     '''
-    imageData = []
+    imageData = None
     
-    imageData = opencv.imread(filePath)
+    imageData = pd.DataFrame(opencv.imread(filePath))
     
     return imageData
 
@@ -112,9 +112,9 @@ def getData():
 
 #Data Preprocessing #############################################################
 
-def resizeImg(img, masks, targetW, targetH):
+def resizeImg(img, masks, targetH, targetW):
     '''
-    Resizes a given image and associated mask to the specified Width and Height
+    Resizes a given image and associated mask to the specified Height and Width
 
     Parameters
     ----------
@@ -122,26 +122,26 @@ def resizeImg(img, masks, targetW, targetH):
         The image data to resize
     masks : pandas.Dataframe[[[float]]]
         An array of images that contain the mask labels
-    targetW : int
-        The width you want to resize to
     targetH : int
         The height you want to resize to
+    targetW : int
+        The width you want to resize to
 
     Returns
     -------
     reimg : pandas.Dataframe[[[float]]]
-        The resized image of size [targetW,targetH]
-    remasks : pandas.Dataframe[[[float]]]
-        An array of masks resized to the size [targetW,targetH]
+        The resized image of size [targetH,targetW]
+    remasks : [pandas.Dataframe[[float]]]
+        An array of masks resized to the size [targetH,targetW]
 
     '''
-    reimg = []
+    reimg = None
     remasks = []
     
-    reimg = tf.image.resize(img, (targetW, targetH), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    reimg = tf.image.resize_with_pad(img, (targetH, targetW), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
     
     for mask in masks:
-        remasks.append(tf.image.resize(mask, (targetW, targetH), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR))
+        remasks.append(tf.image.resize_with_pad(mask, (targetH, targetW), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR))
     
     return reimg, remasks
 
@@ -196,7 +196,7 @@ def normalize_SimpleMask(img, mask):
                 
     return imgNorm, maskNorm
 
-def normalize_SingelMask(img, masks):
+def normalize_SingleMask(img, masks):
     imgNorm = img.copy()
     maskNorm = pd.DataFrame()
     
@@ -213,8 +213,43 @@ def normalize_SingelMask(img, masks):
                 
     return imgNorm, maskNorm
 
-def preprocessData():
-    return
+def preprocessData(imgs, masks, resizeDim=[3264,2448]):
+    '''
+    Applies Preprocessing to the images and associated masks
+    Preprocessing includes:
+        Resizing
+        Normalizing
+
+    Parameters
+    ----------
+    imgs : [pandas.DataFrame[[[float]]]]
+        A list of pandas.DataFrame, each holding the image data
+    masks : [pandas.DataFrame[[int]]
+        A list of pandas.DataFrames that hold the mask data to the associated
+        image
+    resizeDim : [int, int], optional
+        The size of the images you want to resize to. 
+        The default is [3264,2448].
+
+    Returns
+    -------
+    imgNew : [pandas.DataFrame[[[float]]]]
+        The set of preprocessed images for the AI
+    masksNew : [pandas.DataFrame[[int]]
+        The resized masks of the associated images for the AI
+
+    '''
+    imgNew = []
+    masksNew = []
+    
+    for i, m in imgs, masks:
+        img_R, masks_R = resizeImg(i, m, resizeDim[0], resizeDim[1])
+        img_N = normalize(img_R)
+        
+        imgNew.append(img_N)        #Append the resized and normalized image
+        masksNew.append(masks_R)    #Append the resized masks
+    
+    return imgNew, masksNew
 
 #Create Machine Learning Model ##################################################
 
