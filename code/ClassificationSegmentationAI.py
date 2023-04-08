@@ -33,12 +33,12 @@ def loadImgInfoFromFolder(path):
 
     Parameters
     ----------
-    path : string
+    path : str
         The file path to the folder
 
     Returns
     -------
-    images : [string]
+    images : [str]
         A list with all of the images in the folder
 
     '''
@@ -57,7 +57,7 @@ def loadImg(filePath):
 
     Parameters
     ----------
-    filePath : string
+    filePath : str
         Path to the file
 
     Returns
@@ -250,6 +250,36 @@ def preprocessData(imgs, masks, resizeDim=[3264,2448]):
         masksNew.append(masks_R)    #Append the resized masks
     
     return imgNew, masksNew
+
+#Machine Learning Utility Functions #############################################
+
+def trainTestSplit(imgs, seed=None):
+    '''
+    Splits the given data into training and testing sets (70-30)
+
+    Parameters
+    ----------
+    imgs : [str]
+        A list of filepaths to an associated image you want to split
+    seed : int, optional
+        The seed you want to use for the random splitting. The default is None.
+
+    Returns
+    -------
+    imgsTrain : [str]
+        The list of training images to train on
+    imgsTest : [str]
+        The list of testing images to test on
+
+    '''
+    imgsTrain = []
+    imgsTest = []
+    # masksTrain = []
+    # masksTest = []
+    
+    imgsTrain, imgsTest = sklearn.model_selection.train_test_split(imgs, test_size=0.3, random_state=seed)
+    
+    return imgsTrain, imgsTest#, masksTrain, masksTest
 
 #Create Machine Learning Model ##################################################
 
