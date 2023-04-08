@@ -177,6 +177,9 @@ def normalize_SingelMask(img, masks):
                 
     return imgNorm, maskNorm
 
+def preprocessData():
+    return
+
 #Create Machine Learning Model ##################################################
 
 def createModel(inputSize, outputSize):
