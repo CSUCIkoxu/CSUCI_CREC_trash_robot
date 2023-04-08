@@ -17,8 +17,8 @@ import numpy as np
 import pandas as pd
 import sklearn
 import tensorflow as tf
-import tensorflow.keras as keras
-import keras.layers as layers
+from tensorflow import keras #Must use this to import these libraries or you get import errors
+from tensorflow.keras import layers
 
 DATASET_DIR = "../data"
 
@@ -47,7 +47,7 @@ def loadImgInfoFromFolder(path):
     for filename in os.listdir(path):
         
         if filename.lower().endswith(('.jpg','.png','.jpeg')):  #Checks if the file is an image
-            images.append(os.path.join(path,filename))
+            images.append(os.path.join(path,filename).replace('\\','/'))
     
     return images
 
@@ -94,7 +94,7 @@ def getData():
         pathName = os.path.join(DATASET_DIR,filename)
         
         if (os.path.isdir(pathName)):
-            dataX.append(loadImgInfoFromFolder(pathName))
+            dataX += loadImgInfoFromFolder(pathName)
         elif (os.path.isfile(pathName)):
             if (filename == "annotations.json"): #or filename == "annotations_unofficial.json"):    #We did not download the unofficial data, if we do, uncomment this              
                 #Use fiftyone API to decode json data
@@ -213,7 +213,7 @@ def normalize_SingleMask(img, masks):
                 
     return imgNorm, maskNorm
 
-def preprocessData(imgs, masks, resizeDim=[3264,2448]):
+def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,2448) is the most common image size of the dataset
     '''
     Applies Preprocessing to the images and associated masks
     Preprocessing includes:
@@ -227,9 +227,9 @@ def preprocessData(imgs, masks, resizeDim=[3264,2448]):
     masks : [pandas.DataFrame[[int]]
         A list of pandas.DataFrames that hold the mask data to the associated
         image
-    resizeDim : [int, int], optional
+    resizeDim : (int, int), optional
         The size of the images you want to resize to. 
-        The default is [3264,2448].
+        The default is (3264,2448).
 
     Returns
     -------
