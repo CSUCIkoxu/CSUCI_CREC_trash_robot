@@ -77,10 +77,6 @@ def cleanUpDatasets():
     Call this function before rerunning code to remove any reference to any lingering
     datasets still in memory without restarting the kernel/console
 
-    Returns
-    -------
-    None.
-
     '''
     datasetList = fo.list_datasets()
     for ds in datasetList:
