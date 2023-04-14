@@ -281,6 +281,31 @@ def trainTestSplit(imgs, seed=None):
     
     return imgsTrain, imgsTest#, masksTrain, masksTest
 
+def stats(yPred, yTrue):
+    '''
+    Calculates the scores to determine how accurate the models predictions are
+
+    Parameters
+    ----------
+    yPred : pandas.DataFrame[[[int]]]
+        The predicted labels of the dataset
+    yTrue : pandas.DataFrame[[[int]]]
+        The ground truth labels of the dataset
+
+    Returns
+    -------
+    scores : [float]
+        A list with the calculated performance metrics from the predictions
+            []
+    statStr : str
+        A string summerizing the data from scores
+
+    '''
+    scores = []
+    statStr = ""
+    
+    return scores, statStr
+
 #Create Machine Learning Model ##################################################
 
 def createModel(inputSize, outputSize):
