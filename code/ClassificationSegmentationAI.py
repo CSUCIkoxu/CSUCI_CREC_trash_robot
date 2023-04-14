@@ -295,7 +295,7 @@ def createModel(inputSize, outputSize):
 cleanUpDatasets()
 dataX, dataY = getData()
 
-#Only run this to check data in fiftyone Viewer
+#Only run this to check data in fiftyone Viewer, cannot be run in a Notebook editor (like Spyder)
 # if __name__ == "__main__":
 #     # Ensures that the App processes are safely launched on Windows
 #     session = fo.launch_app(dataY,desktop=True)
