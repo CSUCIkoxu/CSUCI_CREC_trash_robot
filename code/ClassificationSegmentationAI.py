@@ -15,12 +15,13 @@ import fiftyone as fo #Library read json files in the COCO format
 #AI Libraries
 import numpy as np
 import pandas as pd
+#import xarray as xr #3d dataframes
 import sklearn
 import tensorflow as tf
 from tensorflow import keras #Must use this to import these libraries or you get import errors
 from tensorflow.keras import layers
 
-DATASET_DIR = "../data"
+DATASET_DIR = "..\\data"
 
 #Data Fetching ##################################################################
 
@@ -47,7 +48,7 @@ def loadImgInfoFromFolder(path):
     for filename in os.listdir(path):
         
         if filename.lower().endswith(('.jpg','.png','.jpeg')):  #Checks if the file is an image
-            images.append(os.path.join(path,filename).replace('\\','/'))
+            images.append(os.path.join(path,filename).replace('/', '\\'))
     
     return images
 
@@ -62,15 +63,50 @@ def loadImg(filePath):
 
     Returns
     -------
-    imageData : pd.DataFrame[[[float]]]
-        The pixel data of the image
+    imageData : [pd.DataFrame[[float]]]
+        The pixel data of the image, spearated into 3 dataframes, each for the RGB
+        color values [r,g,b]
 
     '''
     imageData = None
     
-    imageData = pd.DataFrame(opencv.imread(filePath))
+    img = opencv.imread(filePath).transpose(2,0,1).reshape(3,-1)
+    
+    imageData = [pd.DataFrame(i) for i in img]
     
     return imageData
+
+def loadAllImgs(filepaths):
+    '''
+    Loads all of the images in the given list
+
+    Parameters
+    ----------
+    filepaths : [str]
+        The list of filepaths to the images you want to load
+
+    Returns
+    -------
+    data : pandas.DataFrame[[pd.DataFrame[[float]]]]
+        A dataframe containing the data of all images of the specified paths.
+        The dataframe is 1d, each element is a list of size 3 for rgb, [r,g,b], and each element
+        of the list is a dataframe of the image values
+
+    '''
+    data = []
+    
+    for f in filepaths:
+        data.append(loadImg(f))
+    
+    return data
+
+def getYLabels(filePaths, foDataset):
+    labels = []
+    
+    for f in filePaths:
+        labels.append(foDataset[os.path.abspath(f)])
+        
+    return labels
 
 def cleanUpDatasets():
     '''
@@ -95,7 +131,7 @@ def getData():
             if (filename == "annotations.json"): #or filename == "annotations_unofficial.json"):    #We did not download the unofficial data, if we do, uncomment this              
                 #Use fiftyone API to decode json data
                 dataset = fo.Dataset.from_dir(
-                    data_path=DATASET_DIR+'/../data',
+                    data_path=DATASET_DIR,
                     labels_path=pathName,
                     dataset_type=fo.types.COCODetectionDataset,
                     name=filename)
@@ -302,6 +338,8 @@ def stats(yPred, yTrue):
     
     return scores, statStr
 
+
+
 #Create Machine Learning Model ##################################################
 
 def createModel(inputSize, outputSize):
@@ -315,6 +353,15 @@ def createModel(inputSize, outputSize):
 
 cleanUpDatasets()
 dataX, dataY = getData()
+
+#Preprocess - Test
+dataXTrain, dataXTest = trainTestSplit(dataX, 123)
+
+dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/2)])
+dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/2)], dataY)
+
+dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYRaw)
+
 
 #Only run this to check data in fiftyone Viewer, cannot be run in a Notebook editor (like Spyder)
 # if __name__ == "__main__":
