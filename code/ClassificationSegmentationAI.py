@@ -23,6 +23,65 @@ from tensorflow.keras import layers
 
 DATASET_DIR = "..\\data"
 
+#General Utility Functions ######################################################
+def combineChannels(imgData):
+    '''
+    Combines an image that has been separated into its color channels back to the 
+    original image format:
+        [[width x height], [width x height], [width x height]] -> [width x height x channels]
+
+    Parameters
+    ----------
+    imgData : [pandas.DataFrame[[float or int]]]
+        The separated image that you want to reconstruct [3 x width x height]
+
+    Returns
+    -------
+    reconstructedImg : numpy.array[[[float or int]]]
+        The reconstructed image [width x height x 3]
+
+    '''
+    reconstructedImg = []
+    
+    tempImg = [i.values.tolist() for i in imgData]
+    
+    tempNp = np.array(tempImg)
+    
+    reconstructedImg = tempNp.transpose(1,2,0)
+    
+    return reconstructedImg
+
+def separateChannels(imgData):
+    '''
+    Takes a 3D numpy array or list that contains an images data and separates
+    the image into its color channels. That is,
+        [width x height x channels] -> [[width x height], [width x height], [width x height]]
+    In other words, separates the color channels of a 2D image as their own image
+
+    Parameters
+    ----------
+    imgData : [[[float or int]]] or numpy.array[[[float or int]]]
+        The image data to separate image data from [width x height x 3]
+
+    Returns
+    -------
+    separatedImg : [pandas.DataFrame[[float or int]]]
+         The separated color channels of the image [3 x width x height]
+
+    '''
+    separatedImg = []
+    
+    tempImg = imgData
+    
+    if not isinstance(imgData, np.ndarray):
+        tempImg = np.array(imgData)
+    
+    transposed = tempImg.transpose(2,0,1).reshape(3,-1)
+    
+    separatedImg = [pd.DataFrame(i) for i in transposed]
+    
+    return separatedImg
+
 #Data Fetching ##################################################################
 
 def loadImgInfoFromFolder(path):
@@ -70,9 +129,7 @@ def loadImg(filePath):
     '''
     imageData = None
     
-    img = opencv.imread(filePath).transpose(2,0,1).reshape(3,-1)
-    
-    imageData = [pd.DataFrame(i) for i in img]
+    imageData = separateChannels(opencv.imread(filePath))
     
     return imageData
 
@@ -170,10 +227,14 @@ def resizeImg(img, masks, targetH, targetW):
     reimg = None
     remasks = []
     
-    reimg = tf.image.resize_with_pad(img, (targetH, targetW), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    combinedImg = combineChannels(img)
+    
+    tempImg = tf.image.resize_with_pad(combinedImg, targetH, targetW, method='nearest')
+    
+    reimg = separateChannels(tempImg)
     
     for mask in masks:
-        remasks.append(tf.image.resize_with_pad(mask, (targetH, targetW), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR))
+        remasks.append(tf.image.resize_with_pad(mask, targetH, targetW, method='nearest'))
     
     return reimg, remasks
 
@@ -192,9 +253,9 @@ def normalize(img):
         The normalized image with values between 0-1
 
     '''
-    imgNorm = img.copy()
+    imgNorm = [i.copy() / 255.0 for i in img]
     
-    imgNorm = imgNorm / 255.0
+    #imgNorm = imgNorm / 255.0
     
     return imgNorm
 
@@ -274,8 +335,8 @@ def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,24
     imgNew = []
     masksNew = []
     
-    for i, m in imgs, masks:
-        img_R, masks_R = resizeImg(i, m, resizeDim[0], resizeDim[1])
+    for i in range(len(imgs)):
+        img_R, masks_R = resizeImg(imgs[i], masks[i], resizeDim[0], resizeDim[1])
         img_N = normalize(img_R)
         
         imgNew.append(img_N)        #Append the resized and normalized image
@@ -359,8 +420,9 @@ dataXTrain, dataXTest = trainTestSplit(dataX, 123)
 
 dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/2)])
 dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/2)], dataY)
+dataYMasks = [(m.segmentations.detections[i].mask for i in range(len(m.segmentations.detections))) for m in dataYRaw]
 
-dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYRaw)
+dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYMasks)
 
 
 #Only run this to check data in fiftyone Viewer, cannot be run in a Notebook editor (like Spyder)
