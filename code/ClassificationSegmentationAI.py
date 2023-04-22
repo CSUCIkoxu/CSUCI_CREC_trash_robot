@@ -229,12 +229,13 @@ def resizeImg(img, masks, targetH, targetW):
     
     combinedImg = combineChannels(img)
     
-    tempImg = tf.image.resize_with_pad(combinedImg, targetH, targetW, method='nearest')
+    tempImg = tf.image.resize(combinedImg, (targetH, targetW), method='nearest')
     
     reimg = separateChannels(tempImg)
     
     for mask in masks:
-        remasks.append(tf.image.resize_with_pad(mask, targetH, targetW, method='nearest'))
+        print(mask.mask)
+        remasks.append(opencv.resize(mask.mask, (targetW, targetH), interpolation=opencv.INTER_NEAREST))
     
     return reimg, remasks
 
@@ -322,7 +323,7 @@ def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,24
         image
     resizeDim : (int, int), optional
         The size of the images you want to resize to. 
-        The default is (3264,2448).
+        The default is (3264,2448). (Height, Width)
 
     Returns
     -------
@@ -341,6 +342,7 @@ def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,24
         
         imgNew.append(img_N)        #Append the resized and normalized image
         masksNew.append(masks_R)    #Append the resized masks
+        
     
     return imgNew, masksNew
 
@@ -420,7 +422,9 @@ dataXTrain, dataXTest = trainTestSplit(dataX, 123)
 
 dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/2)])
 dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/2)], dataY)
-dataYMasks = [(m.segmentations.detections[i].mask for i in range(len(m.segmentations.detections))) for m in dataYRaw]
+
+dataYMasks = [m.segmentations.detections for m in dataYRaw]
+# dataYMasks = [(m.segmentations.detections[i].mask for i in range(len(m.segmentations.detections))) for m in dataYRaw]
 
 dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYMasks)
 
