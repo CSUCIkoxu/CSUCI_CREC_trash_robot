@@ -292,15 +292,22 @@ def resizeImg(img, masks, targetH, targetW):
     reimg = None
     remasks = []
     
-    combinedImg = combineChannels(img)
+    combinedImgs = np.array(combineChannelsInArr(img))
     
-    tempImg = tf.image.resize(combinedImg, (targetH, targetW), method='nearest')
+    tempImgs = tf.image.resize(combinedImgs, (targetH, targetW), method='nearest')
     
-    reimg = separateChannels(tempImg)
+    reimg = separateChannelsInArr(tempImgs)
     
-    for mask in masks:
-        intMask = bool2int(mask.mask)
-        remasks.append(opencv.resize(intMask, (targetW, targetH), interpolation=opencv.INTER_NEAREST))
+    cntr = 0
+    
+    for maskArr in masks:
+        print("Mask " + cntr)
+        subRemasks = []
+        for mask in maskArr:
+            intMask = bool2int(mask.mask)
+            subRemasks.append(opencv.resize(intMask, (targetW, targetH), interpolation=opencv.INTER_NEAREST))
+        remasks.append(subRemasks)
+        cntr += 1
     
     return reimg, remasks
 
@@ -408,7 +415,7 @@ def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,24
         img_N = normalize(img_R)
         
         imgNew.append(img_N)        #Append the resized and normalized image
-        masksNew.append(masks_R)    #Append the resized masks
+    masksNew.append(masks_R)    #Append the resized masks
         
     
     return imgNew, masksNew
