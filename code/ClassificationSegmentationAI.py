@@ -82,6 +82,23 @@ def separateChannels(imgData):
     
     return separatedImg
 
+def bool2int(mask):
+    '''
+    Converts numpy arrays of booleans to numpy arrays of ints
+
+    Parameters
+    ----------
+    mask : numpy.array[bool]
+        Any dimension numpy array of booleans
+
+    Returns
+    -------
+    numpy.array[int]
+        The mask as a numpy array of ints where 0 is false and 1 is true
+
+    '''
+    return mask.astype(int)
+
 #Data Fetching ##################################################################
 
 def loadImgInfoFromFolder(path):
@@ -234,8 +251,9 @@ def resizeImg(img, masks, targetH, targetW):
     reimg = separateChannels(tempImg)
     
     for mask in masks:
+        intMask = bool2int(mask.mask)
         print(mask.mask)
-        remasks.append(opencv.resize(mask.mask, (targetW, targetH), interpolation=opencv.INTER_NEAREST))
+        remasks.append(opencv.resize(intMask, (targetW, targetH), interpolation=opencv.INTER_NEAREST))
     
     return reimg, remasks
 
