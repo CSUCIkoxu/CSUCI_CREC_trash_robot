@@ -82,6 +82,54 @@ def separateChannels(imgData):
     
     return separatedImg
 
+def combineChannelsInArr(imgs):
+    '''
+    Calls combineChannels() on all images in an array
+
+    Parameters
+    ----------
+    imgs : [[pandas.DataFrame[[float or int]]], ...]
+        A list with all the image data with separated channels (as specified in 
+        separateChannels)
+
+    Returns
+    -------
+    combinedImgs : [numpy.array[[[float or int]]]]
+        The list of all images with combined channels (as specified in 
+        combinedChannels)
+
+    '''
+    combinedImgs = []
+    
+    for i in imgs:
+        combinedImgs.append(combineChannels(i))
+        
+    return combinedImgs
+
+def separateChannelsInArr(imgs):
+    '''
+    Calls separateChannels() on all images in an array
+
+    Parameters
+    ----------
+    imgs : [numpy.array[[[float or int]]]]
+        The list of all images with combined channels (as specified in 
+        combinedChannels)
+
+    Returns
+    -------
+    separatedImgs : [[pandas.DataFrame[[float or int]]], ...]
+        A list with all the image data with separated channels (as specified in 
+        separateChannels)
+
+    '''
+    separatedImgs = []
+    
+    for i in imgs:
+        separatedImgs.append(separateChannels(i))
+        
+    return separatedImgs
+
 def bool2int(mask):
     '''
     Converts numpy arrays of booleans to numpy arrays of ints
@@ -224,7 +272,7 @@ def resizeImg(img, masks, targetH, targetW):
 
     Parameters
     ----------
-    img : pandas.Dataframe[[[float]]]
+    img : [pandas.Dataframe[[float]]] or [[pd.Dataframe[[float]], ...], ...]
         The image data to resize
     masks : pandas.Dataframe[[[float]]]
         An array of images that contain the mask labels
@@ -252,7 +300,6 @@ def resizeImg(img, masks, targetH, targetW):
     
     for mask in masks:
         intMask = bool2int(mask.mask)
-        print(mask.mask)
         remasks.append(opencv.resize(intMask, (targetW, targetH), interpolation=opencv.INTER_NEAREST))
     
     return reimg, remasks
@@ -354,8 +401,10 @@ def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,24
     imgNew = []
     masksNew = []
     
+    img_R, masks_R = resizeImg(imgs, masks, resizeDim[0], resizeDim[1])
+    
     for i in range(len(imgs)):
-        img_R, masks_R = resizeImg(imgs[i], masks[i], resizeDim[0], resizeDim[1])
+        # img_R, masks_R = resizeImg(imgs[i], masks[i], resizeDim[0], resizeDim[1])
         img_N = normalize(img_R)
         
         imgNew.append(img_N)        #Append the resized and normalized image
@@ -438,8 +487,8 @@ dataX, dataY = getData()
 #Preprocess - Test
 dataXTrain, dataXTest = trainTestSplit(dataX, 123)
 
-dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/2)])
-dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/2)], dataY)
+dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/4)])
+dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/4)], dataY)
 
 dataYMasks = [m.segmentations.detections for m in dataYRaw]
 # dataYMasks = [(m.segmentations.detections[i].mask for i in range(len(m.segmentations.detections))) for m in dataYRaw]
