@@ -292,9 +292,12 @@ def resizeImg(img, masks, targetH, targetW):
     reimg = None
     remasks = []
     
-    combinedImgs = np.array(combineChannelsInArr(img))
+    combinedImgs = combineChannelsInArr(img)
+    # print(combinedImgs)
     
-    tempImgs = tf.image.resize(combinedImgs, (targetH, targetW), method='nearest')
+    tempImgs = np.empty([0])
+    for i in combinedImgs:
+        tempImgs = np.append(tempImgs, tf.image.resize(i, (targetH, targetW), method='nearest'))
     
     reimg = separateChannelsInArr(tempImgs)
     
@@ -494,8 +497,8 @@ dataX, dataY = getData()
 #Preprocess - Test
 dataXTrain, dataXTest = trainTestSplit(dataX, 123)
 
-dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/4)])
-dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/4)], dataY)
+dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/10)])
+dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/10)], dataY)
 
 dataYMasks = [m.segmentations.detections for m in dataYRaw]
 # dataYMasks = [(m.segmentations.detections[i].mask for i in range(len(m.segmentations.detections))) for m in dataYRaw]
