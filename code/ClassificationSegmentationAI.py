@@ -295,7 +295,7 @@ def resizeImg(img, masks, targetH, targetW):
     combinedImgs = combineChannelsInArr(img)
     # print(combinedImgs)
     
-    tempImgs = np.empty([0])
+    tempImgs = np.empty([0,0,0,0])
     for i in combinedImgs:
         tempImgs = np.append(tempImgs, tf.image.resize(i, (targetH, targetW), method='nearest'))
     
