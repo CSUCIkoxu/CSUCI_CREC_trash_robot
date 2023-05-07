@@ -295,16 +295,17 @@ def resizeImg(img, masks, targetH, targetW):
     combinedImgs = combineChannelsInArr(img)
     # print(combinedImgs)
     
-    tempImgs = np.empty([0,0,0,0])
+    tempImgs = []
     for i in combinedImgs:
-        tempImgs = np.append(tempImgs, tf.image.resize(i, (targetH, targetW), method='nearest'))
+        newI = tf.image.resize(i, (targetH, targetW), method='nearest')
+        tempImgs.append(newI.numpy())
     
     reimg = separateChannelsInArr(tempImgs)
     
     cntr = 0
     
     for maskArr in masks:
-        print("Mask " + cntr)
+        print("Mask " + str(cntr))
         subRemasks = []
         for mask in maskArr:
             intMask = bool2int(mask.mask)
@@ -415,10 +416,11 @@ def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,24
     
     for i in range(len(imgs)):
         # img_R, masks_R = resizeImg(imgs[i], masks[i], resizeDim[0], resizeDim[1])
-        img_N = normalize(img_R)
+        img_N = normalize(img_R[i])
         
         imgNew.append(img_N)        #Append the resized and normalized image
-    masksNew.append(masks_R)    #Append the resized masks
+        
+    masksNew = masks_R
         
     
     return imgNew, masksNew
