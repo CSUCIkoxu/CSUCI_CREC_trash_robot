@@ -147,6 +147,56 @@ def bool2int(mask):
     '''
     return mask.astype(int)
 
+def expandMask(imgDim, bounding_box, mask):
+    '''
+    Expands the masks stored in fiftyone to a full size mask with the dimensions
+    of the original image.
+    
+    COCO JSON only stores the parts of the mask that is in the bounding box,
+    in addition, Fiftyone stores the bounding box coordinates in relative 
+    coordinates [<top-left-x>, <top-left-y>, <width>, <height>] between 0 and 1.
+    This is fine until we need to resize images and their masks, thus, this
+    function is made to expand the mask so it may be resized with ease or use
+    in training.
+    
+    If there is a need to speed up processing time, this is an area for optimization
+    as this is a "path of least resistance" solution.
+
+    Parameters
+    ----------
+    imgDim : [int]
+        An array that holds the original image's shape [Width, Height]
+        (note: np.shape gives [Height, Width])
+    bounding_box : [float]
+        An array containing the relative bounding box lengths of structure:
+            [<top-left-x>, <top-left-y>, <width>, <height>]
+        Which is the standard format of the 'bounding_box' field in Fiftyone
+    mask : np.Array[[bool]]
+        The mask array that stores the segmentation data of the mask within
+        the bounding box
+
+    Returns
+    -------
+    eMask : np.Array[bool]
+        The expanded, full-size mask of the target image instead of a small
+        box within the image.
+        
+
+    '''
+    #Create numpy array of size imgDim filled with False
+    eMask = np.full((imgDim[0], imgDim[1]), False)
+    
+    #Calculate the position of the bounding box since Fiftyone stores the bounding box (and thus the mask position) as a float between 0 and 1 relative to the image size
+    bboxCoor = (int((imgDim[0] * bounding_box[0]) + 0.5), int((imgDim[1] * bounding_box[1]) + 0.5))
+    bboxDim = (int((imgDim[0] * bounding_box[2]) + 0.5), int((imgDim[1] * bounding_box[3]) + 0.5)) #I could just use the mask size
+    
+    #Iterate through each classification in the mask and sets it in the appropriate space in the expandded mask
+    for i in range(bboxDim[0]):
+        for j in range(bboxDim[1]):
+            eMask[bboxCoor[0] + i][bboxCoor[1] + j] = mask[i][j]
+    
+    return eMask
+
 #Data Fetching ##################################################################
 
 def loadImgInfoFromFolder(path):
@@ -309,7 +359,8 @@ def resizeImg(img, masks, targetH, targetW):
         subRemasks = []
         for mask in maskArr:
             intMask = bool2int(mask.mask)
-            subRemasks.append(opencv.resize(intMask, (targetW, targetH), interpolation=opencv.INTER_NEAREST))
+            newMaskDim = (int((targetW * mask.bounding_box[2]) + 0.5), int((targetH * mask.bounding_box[3]) + 0.5))
+            subRemasks.append(opencv.resize(intMask, (newMaskDim[0], newMaskDim[1]), interpolation=opencv.INTER_NEAREST))
         remasks.append(subRemasks)
         cntr += 1
     
@@ -479,8 +530,6 @@ def stats(yPred, yTrue):
     statStr = ""
     
     return scores, statStr
-
-
 
 #Create Machine Learning Model ##################################################
 
