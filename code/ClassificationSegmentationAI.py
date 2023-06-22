@@ -76,7 +76,7 @@ def separateChannels(imgData):
     if not isinstance(imgData, np.ndarray):
         tempImg = np.array(imgData)
     
-    transposed = tempImg.transpose(2,0,1).reshape(3,-1)
+    transposed = tempImg.transpose(2,0,1)
     
     separatedImg = [pd.DataFrame(i) for i in transposed]
     
