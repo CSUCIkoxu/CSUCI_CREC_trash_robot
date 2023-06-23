@@ -445,9 +445,11 @@ def preprocessData(imgs, masks, resizeDim=(3264,2448)): #The dimensions (3264,24
     ----------
     imgs : [pandas.DataFrame[[[float]]]]
         A list of pandas.DataFrame, each holding the image data
-    masks : [pandas.DataFrame[[int]]
-        A list of pandas.DataFrames that hold the mask data to the associated
-        image
+    masks : [fiftyone.detection[[int]]
+        The list of detections samples provided by the fiftyone datastructure.
+        The list consists of samples from the database, that is:
+            [database.segmentations.detections]
+        *detections is a list consisting of the detection datastructure
     resizeDim : (int, int), optional
         The size of the images you want to resize to. 
         The default is (3264,2448). (Height, Width)
@@ -533,6 +535,85 @@ def stats(yPred, yTrue):
 
 #Create Machine Learning Model ##################################################
 
+def createModel1(inputSize, outputSize):
+    '''
+    A simple U-Net segmentation model provided by https://www.tensorflow.org/tutorials/images/segmentation
+    Intended as a quick and dirty test model rather than an optimized model for trash detection.
+
+    Parameters
+    ----------
+    inputSize : [int]
+        The dimensions of the input of the parameter of the model (usually the image size)
+        Syntax:
+            [Height, Width, Channels]
+    outputSize : [int]
+        The dimensions of the output of the model.
+        In this case, we would want the output to be the dimensions of the image
+        times the number of channels/classification categories in the data
+        Syntax:
+            [Height, Width, Channels/Categories]
+
+    Returns
+    -------
+    model : tensorflow.keras.model
+        The constructed machine learning model
+
+    '''
+    model = None
+    
+    # Simple U-net Model provided by https://www.tensorflow.org/tutorials/images/segmentation
+    from tensorflow_examples.models.pix2pix import pix2pix
+    
+    base_model = tf.keras.applications.MobileNetV2(input_shape=inputSize, include_top=False)
+    # Use the activations of these layers
+    layer_names = [
+        'block_1_expand_relu',   # 64x64
+        'block_3_expand_relu',   # 32x32
+        'block_6_expand_relu',   # 16x16
+        'block_13_expand_relu',  # 8x8
+        'block_16_project',      # 4x4
+    ]
+    base_model_outputs = [base_model.get_layer(name).output for name in layer_names]
+    
+    # Create the feature extraction model
+    down_stack = tf.keras.Model(inputs=base_model.input, outputs=base_model_outputs)
+    
+    down_stack.trainable = False
+    
+    inputs = tf.keras.layers.Input(shape=inputSize)
+
+    # Downsampling through the model
+    skips = down_stack(inputs)
+    x = skips[-1]
+    skips = reversed(skips[:-1])
+    
+    # Upsampling
+    up_stack = [
+        pix2pix.upsample(512, 3),  # 4x4 -> 8x8
+        pix2pix.upsample(256, 3),  # 8x8 -> 16x16
+        pix2pix.upsample(128, 3),  # 16x16 -> 32x32
+        pix2pix.upsample(64, 3),   # 32x32 -> 64x64
+    ]
+
+    # Upsampling and establishing the skip connections
+    for up, skip in zip(up_stack, skips):
+      x = up(x)
+      concat = tf.keras.layers.Concatenate()
+      x = concat([x, skip])
+      
+    output_channels = 60 #There are 60 categories in the dataset - more info here: http://tacodataset.org/stats
+  
+    # This is the last layer of the model
+    last = tf.keras.layers.Conv2DTranspose(
+        filters=output_channels, kernel_size=3, strides=2,
+        padding='same')  #64x64 -> 128x128
+  
+    x = last(x)
+
+    model = keras.Model(inputs=inputs, outputs=x)
+    
+    return model
+
 def createModel(inputSize, outputSize):
     model = None
     
@@ -555,6 +636,8 @@ dataYMasks = [m.segmentations.detections for m in dataYRaw]
 # dataYMasks = [(m.segmentations.detections[i].mask for i in range(len(m.segmentations.detections))) for m in dataYRaw]
 
 dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYMasks)
+
+#Create the machine learning model
 
 
 #Only run this to check data in fiftyone Viewer, cannot be run in a Notebook editor (like Spyder)
