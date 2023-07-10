@@ -20,7 +20,6 @@ import sklearn
 import tensorflow as tf
 from tensorflow import keras #Must use this to import these libraries or you get import errors
 from tensorflow.keras import layers
-#import tensorflow_datasets as tfds
 
 DATASET_DIR = "..\\data"
 ANNOTATION_CATEGORIES = ["Cigarette","Unlabeled litter","Plastic film","Clear plastic bottle","Other plastic",
