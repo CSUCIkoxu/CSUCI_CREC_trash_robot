@@ -20,8 +20,31 @@ import sklearn
 import tensorflow as tf
 from tensorflow import keras #Must use this to import these libraries or you get import errors
 from tensorflow.keras import layers
+#import tensorflow_datasets as tfds
 
 DATASET_DIR = "..\\data"
+ANNOTATION_CATEGORIES = ["Cigarette","Unlabeled litter","Plastic film","Clear plastic bottle","Other plastic",
+                         "Other plastic wrapper","Drink can","Plastic bottle cap","Plastic straw","Broken glass",
+                         "Styrofoam piece","Disposable plastic cup","Glass bottle",
+                         "Pop tab","Other carton","Normal paper","Metal bottle cap",
+                         "Plastic lid","Paper cup","Corrugated carton","Aluminium foil",
+                         "Single-use carrier bag","Other plastic bottle","Drink carton",
+                         "Tissues","Crisp packet","Disposable food container","Plastic utensils"
+                         ,"Food Can","Garbage bag","Meal carton","Rope & strings",
+                         "Paper bag","Scrap metal","Foam food container","Foam cup",
+                         "Magazine paper","Wrapping paper","Egg carton","Aerosol",
+                         "Metal lid","Spread tub","Food waste","Shoe","Squeezable tube",
+                         "Aluminium blister pack","Glass cup","Other plastic container",
+                         "Glass jar","Six pack rings","Toilet tube","Paper straw",
+                         "Plastic glooves","Tupperware","Polypropylene bag","Pizza box",    #[sic] gloves is misspelt
+                         "Other plastic cup","Battery","Carded blister pack","Plastified paper bag"]
+ANNOTATION_SUPER_CATEGORIES = ["Plastic bag & wrapper","Cigarette","Unlabeled litter",
+                               "Bottle","Bottle cap","Can","Other plastic","Carton",
+                               "Cup","Straw","Paper","Broken glass","Styrofoam piece",
+                               "Pop tab","Lid","Plastic container","Aluminium foil",
+                               "Plastic utensils","Rope & strings","Paper bag","Scrap metal",
+                               "Food Waste","Shoe","Squeezable tube","Blister pack",
+                               "Glass jar","Plastic glooves","Battery"]
 
 #General Utility Functions ######################################################
 def combineChannels(imgData):
@@ -187,15 +210,66 @@ def expandMask(imgDim, bounding_box, mask):
     eMask = np.full((imgDim[0], imgDim[1]), False)
     
     #Calculate the position of the bounding box since Fiftyone stores the bounding box (and thus the mask position) as a float between 0 and 1 relative to the image size
-    bboxCoor = (int((imgDim[0] * bounding_box[0]) + 0.5), int((imgDim[1] * bounding_box[1]) + 0.5))
-    bboxDim = (int((imgDim[0] * bounding_box[2]) + 0.5), int((imgDim[1] * bounding_box[3]) + 0.5)) #I could just use the mask size
+    #(Height, Width)
+    bboxCoor = (int((imgDim[0] * bounding_box[1]) + 0.5), int((imgDim[1] * bounding_box[0]) + 0.5))
+    bboxDim = (int((imgDim[0] * bounding_box[3]) + 0.5), int((imgDim[1] * bounding_box[2]) + 0.5)) #I could just use the mask size
     
     #Iterate through each classification in the mask and sets it in the appropriate space in the expandded mask
+    # print("BBox: {}, Actual: {}".format(bboxDim, mask.shape))
     for i in range(bboxDim[0]):
         for j in range(bboxDim[1]):
             eMask[bboxCoor[0] + i][bboxCoor[1] + j] = mask[i][j]
     
     return eMask
+
+def combineMasks(imgDim, masks, detectionList):
+    '''
+    Converts the given list of partial masks (i.e. masks confined to a bounding box)
+    into a list of full categorical masks (i.e. mask of the entire image for 
+                                           each individual category)
+
+    Parameters
+    ----------
+    imgDim :  [int]
+        An array that holds the original image's shape [Width, Height]
+        (note: np.shape gives [Height, Width])
+    masks : np.Array[[bool]]
+        The mask array that stores the segmentation data of the mask within
+        the bounding box
+    detectionList : [[fo.Detection]]
+        A list consisting of the various detections within the associated image
+        and mask
+
+    Returns
+    -------
+    masks_expanded_combined : [[numpy.array]]
+        The list of full categorical masks of dimension [imgDimH x imgDimW x 60]
+        Where 60 is the number of annotation categories in the dataset
+
+    '''
+    #Converts the list of partial segmentations to full image segmentations
+    masks_expanded = []
+    for i in range(len(masks)):
+        expandedMasks = []
+        for j in range(len(masks[i])):
+            #Creates a tuple (expanded mask, annotation label)
+            expandedMasks.append((expandMask(imgDim, detectionList[i][j].bounding_box, masks[i][j]), detectionList[i][j].label))
+        masks_expanded.append(expandedMasks)
+
+    #Converts the list of full image segmentations into a full list of categorical annotations, i.e. the masks for all categories, even if they are not present
+    masks_expanded_combined = []
+    for i in masks_expanded:
+        combinedMasks = np.full((len(ANNOTATION_CATEGORIES), imgDim[0], imgDim[1]), False)
+        for j in i:
+            #Perform a bitwise OR on the proper category of the combined masks array
+            combinedMasks[ANNOTATION_CATEGORIES.index(j[1])] = np.bitwise_or(combinedMasks[ANNOTATION_CATEGORIES.index(j[1])], j[0])
+        #Transpose mask_expanded_combined to change the format from (60 x imgDimH x imgDimW) to
+        #(imgDimH x imgDimW x 60)
+        combinedMasks = combinedMasks.transpose(1,2,0)
+        
+        masks_expanded_combined.append(combinedMasks)
+        
+    return masks_expanded_combined
 
 #Data Fetching ##################################################################
 
@@ -273,12 +347,69 @@ def loadAllImgs(filepaths):
     return data
 
 def getYLabels(filePaths, foDataset):
+    '''
+    Gets the label information relevant to the provided list of file paths
+
+    Parameters
+    ----------
+    filePaths : [str]
+        A list of file paths you want to retrieve data from
+    foDataset : fo.Dataset
+        The dataset you want to retrieve data from
+
+    Returns
+    -------
+    labels : [fo.Sample]
+        A list of segmentation samples for each image
+
+    '''
     labels = []
     
     for f in filePaths:
         labels.append(foDataset[os.path.abspath(f)])
         
     return labels
+
+def getDetections(dataYLabels):
+    '''
+    Gets the detection information from a given list of labels (from getYLabels)
+
+    Parameters
+    ----------
+    dataYLabels : [fo.Samples]
+        The list of segmentation samples you want to get the detection data for
+
+    Returns
+    -------
+    [[fo.Detection]]
+        The list of detection information for each identified segmentation
+
+    '''
+    return [m.segmentations.detections for m in dataYLabels]
+
+def getMasks(dataYDetections):
+    '''
+    Gets the mask data from a given list of detections (from getDetections)
+
+    Parameters
+    ----------
+    dataYDetections : [[fo.Detection]]
+        A 2-d list of all the detections of the given selection of data
+
+    Returns
+    -------
+    masksList : [[numpy.array[[bool]]]]
+        A 2-d list of 2-d masks for each detection
+
+    '''
+    masksList = []
+    
+    for d in dataYDetections:
+        masks = []
+        for s in d:
+            masks.append(s.mask)
+    
+    return masksList
 
 def cleanUpDatasets():
     '''
@@ -617,9 +748,67 @@ def createModel1(inputSize, outputSize):
 def createModel(inputSize, outputSize):
     model = None
     
-    model = keras.Sequential(layers.Conv2D(3, 20, input_shape=inputSize, activation='relu'))
+    model = createModel1(inputSize, outputSize)
     
     return model
+
+#Train Machine Learning Model ###################################################
+def batch_loadImg(xxTrain, yData, index, batchSize, imgDim=(3264,2448)):
+    xBatchData = None
+    yBatchData = None
+    
+    x_selected = []
+    x_dat = []
+    y_dat = []
+    
+    #Fetch the image data for this batch
+    for i in range(index*batchSize, (index*batchSize) + batchSize):
+        x_selected.append(xxTrain[i])
+        x_dat.append(loadImg(xxTrain[i]))
+    #Fetch the masks from the database
+    y_dat = getYLabels(x_selected, yData)
+    y_dat_masks = [m.segmentations.detections for m in y_dat]
+    
+    #Preprocess the data before sending to fit
+    x_dat_norm, y_dat_masks_norm = preprocessData(x_dat, y_dat_masks, resizeDim=imgDim)
+    
+    #Set xBatchData and combines the masks into a workable format (imgDim x 60)
+    xBatchData = x_dat_norm
+    yBatchData = combineMasks(imgDim, y_dat_masks_norm, y_dat)
+    
+    return xBatchData, yBatchData
+
+def batchGenerator(xxTrain, yData, yMasks, batchSize, steps, imgDim=(3264,2448)):
+    indx = 0
+    while True:
+        yield batch_loadImg(xxTrain, yData, indx, batchSize, imgDim)
+        if indx < steps:
+            indx += 1
+        else:
+            indx = 0
+    
+def trainSequence(model, xxTrain, xValid, yData, yMasks):
+    trainedModel = None
+    
+    
+    
+    return trainedModel
+
+def iterativeTrain(model, xTrain, xTest, yData, yMasks):
+    trainedModel = None
+    hyperParams = []
+    trainingScore = 0
+    
+    #Validation Split
+    xxTrain, xVal = trainTestSplit(xTrain,seed=123)
+    
+    scores = {}
+    scoreEpoch = {}
+    optimizers = ['adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam', 'rmsprop']#, 'SGD']     #SGD just returns Nan's for some reason
+    lossFuncs = [tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),'poisson','kl_divergence']
+    metrics = [['accuracy']]
+    
+    return trainedModel
 
 #Main ###########################################################################
 
@@ -637,7 +826,24 @@ dataYMasks = [m.segmentations.detections for m in dataYRaw]
 
 dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYMasks)
 
+# dataYRaw_norm_expanded = []
+# for i in range(len(dataYRaw_norm)):
+#     expandedMasks = []
+#     for j in range(len(dataYRaw_norm[i])):
+#         expandedMasks.append(expandMask((3264,2448), dataYMasks[i][j].bounding_box, dataYRaw_norm[i][j]))
+#     dataYRaw_norm_expanded.append(expandedMasks)
+
+# dataYRaw_norm_expanded_combined = []
+# for i in dataYRaw_norm_expanded:
+#     combinedMasks = np.full((3264,2448), False)
+#     for j in i:
+#         combinedMasks = np.bitwise_or(combinedMasks, j)
+#     dataYRaw_norm_expanded_combined.append(combinedMasks)
+
+masksCombined = combineMasks((3264,2448), dataYRaw_norm, dataYMasks)
+
 #Create the machine learning model
+model = createModel((3264,2448,3), (3264,2448))
 
 
 #Only run this to check data in fiftyone Viewer, cannot be run in a Notebook editor (like Spyder)
