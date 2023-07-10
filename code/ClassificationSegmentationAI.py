@@ -242,9 +242,10 @@ def combineMasks(imgDim, masks, detectionList):
 
     Returns
     -------
-    masks_expanded_combined : [[numpy.array]]
+    masks_expanded_combined : [numpy.array[[[int]]]]
         The list of full categorical masks of dimension [imgDimH x imgDimW x 60]
         Where 60 is the number of annotation categories in the dataset
+        Individual indices are ints of either 0 or 1 
 
     '''
     #Converts the list of partial segmentations to full image segmentations
@@ -269,7 +270,7 @@ def combineMasks(imgDim, masks, detectionList):
         
         masks_expanded_combined.append(combinedMasks)
         
-    return masks_expanded_combined
+    return masks_expanded_combined.astype(float)
 
 #Data Fetching ##################################################################
 
@@ -754,6 +755,35 @@ def createModel(inputSize, outputSize):
 
 #Train Machine Learning Model ###################################################
 def batch_loadImg(xxTrain, yData, index, batchSize, imgDim=(3264,2448)):
+    '''
+    Individual loading function for loading data in batches of batchSize each call.
+    The index specifies which section of the data to pull the batch from.
+    Preprocesses the data before returning the data for use
+
+    Parameters
+    ----------
+    xxTrain : [str]
+        A list of filepaths to the images for training
+    yData : fo.dataset
+        The full dataset of label information provided be reading the COCO json
+        file using the Fiftyone library
+    index : int
+        The current slice to gather data from xxTrain
+    batchSize : int
+        The volume of data to pull into memory
+    imgDim : [int], optional
+        A list or tuple containing the image resize dimensions. 
+        The dimensions should be of the format: [H, W]
+        The default is (3264,2448).
+
+    Returns
+    -------
+    xBatchData : [numpy.array[[[float]]]]
+        A list of image data loaded for training
+    yBatchData : [numpy.array[[[float]]]]
+        A list of categorized masks of the entire associated image
+
+    '''
     xBatchData = None
     yBatchData = None
     
@@ -773,26 +803,106 @@ def batch_loadImg(xxTrain, yData, index, batchSize, imgDim=(3264,2448)):
     x_dat_norm, y_dat_masks_norm = preprocessData(x_dat, y_dat_masks, resizeDim=imgDim)
     
     #Set xBatchData and combines the masks into a workable format (imgDim x 60)
-    xBatchData = x_dat_norm
+    xBatchData = combineChannelsInArr(x_dat_norm)
     yBatchData = combineMasks(imgDim, y_dat_masks_norm, y_dat)
     
     return xBatchData, yBatchData
 
-def batchGenerator(xxTrain, yData, yMasks, batchSize, steps, imgDim=(3264,2448)):
+def batchGenerator(xData, yData, batchSize, steps, imgDim=(3264,2448)):
+    '''
+    A generator object that fetches specified data when called upon
+
+    Parameters
+    ----------
+    xData : [str]
+        A list of filepath strings that lead to an associated image in storage
+    yData : fo.dataset
+        A fiftyone dataset object that contains all of the label information
+    batchSize : int
+        The number of samples to pull into memory per batch
+    steps : int
+        The number of batches there will be when reading the data
+    imgDim : [int], optional
+        A list or tuple containing the image resize dimensions. 
+        The dimensions should be of the format: [H, W]
+        The default is (3264,2448).
+
+    Yields
+    ------
+    ([numpy.array[[[float]]]], [numpy.array[[[float]]]])
+        A tuple containing the image data (x) and the mask data (y) in the format
+        (x,y)
+    '''
     indx = 0
     while True:
-        yield batch_loadImg(xxTrain, yData, indx, batchSize, imgDim)
+        yield batch_loadImg(xData, yData, indx, batchSize, imgDim)
         if indx < steps:
             indx += 1
         else:
             indx = 0
     
-def trainSequence(model, xxTrain, xValid, yData, yMasks):
+def trainSequence(model, xxTrain, xValid, yData, hyperParams=['adam',tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),['accuracy']], batchSize=20, epochNum=30, callbacks=None):
+    '''
+    Performs a training sequence of the model given a set of hyperparameters.
+    This function is intended for performing hold-out cross-validation for optimization
+    hyperparameters.
+
+    Parameters
+    ----------
+    model : keras.Model
+        The predesigned model to train on
+    xxTrain : [str]
+        A list of filepath strings to direct to an image in storage intended to
+        be used for validation training
+    xValid : [str]
+        A list of filepath strings to direct to an image in storage intended to
+        be used for validation testing
+    yData : fo.dataset
+        A Fiftyone dataset that contains all label information for every image
+        in the database
+    hyperParams : [str or keras object], optional
+        A list of hyperparameters to use in the compilation and training of the model. 
+        The default is ['adam',tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),['accuracy']].
+    batchSize : int, optional
+        The number of samples to pull into memory for each training batch. 
+        The default is 20.
+    epochNum : int, optional
+        The maximum number of epochs to perform when training the model. If an 
+        earlystopping callback is given, it will stop when the callback determines 
+        is best. 
+        The default is 30.
+    callbacks : [keras.callback], optional
+        A list of callbacks to use in the training model. The default is None.
+
+    Returns
+    -------
+    trainedModel : keras.Model
+        A trained clone of the model provided
+    modelHist : keras.History
+        A history object that contains all the training and scoring information 
+        during the trainin process
+
+    '''
     trainedModel = None
+    modelHist = None
     
+    print("Model training on : [{}, {}, {}]".format(hyperParams[0], hyperParams[1], hyperParams[2]))
     
+    #Create the current itereaetion of the training model
+    trainedModel = keras.models.clone_model(model)
+    trainedModel.compile(optimizer=hyperParams[0], loss=hyperParams[1], metrics=hyperParams[2])
     
-    return trainedModel
+    #Define the number of steps for training and validation
+    stepsPerEpoch_training = len(xxTrain) / batchSize
+    stepsPerEpoch_valid = len(xValid) / batchSize
+    #Create the batch generators for the data of the training data nad validation data
+    trainingBatchGen = batchGenerator(xxTrain, yData, batchSize, stepsPerEpoch_training)
+    validationBatchGen = batchGenerator(xValid, yData, batchSize, stepsPerEpoch_valid)
+    
+    #Train the model by iterativeley pulling data using a generator; NOTE: multiprocessing is used to get data from the generators and put it in a queue for the gpu, use if data fetching is slow
+    modelHist = trainedModel.fit(x=trainingBatchGen, validation_data=validationBatchGen, epochs=epochNum, steps_per_epoch=stepsPerEpoch_training, validation_steps=stepsPerEpoch_valid, callbacks=callbacks, max_queue_size=5, workers=3, use_multiprocessing=True)
+    
+    return trainedModel, modelHist
 
 def iterativeTrain(model, xTrain, xTest, yData, yMasks):
     trainedModel = None
