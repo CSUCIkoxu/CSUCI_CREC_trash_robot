@@ -856,6 +856,7 @@ def trainSequence(model, xxTrain, xValid, yData, hyperParams=['adam',tf.keras.lo
     xValid : [str]
         A list of filepath strings to direct to an image in storage intended to
         be used for validation testing
+        If xValid is None, then no validation will be performed
     yData : fo.dataset
         A Fiftyone dataset that contains all label information for every image
         in the database
@@ -893,10 +894,14 @@ def trainSequence(model, xxTrain, xValid, yData, hyperParams=['adam',tf.keras.lo
     
     #Define the number of steps for training and validation
     stepsPerEpoch_training = len(xxTrain) / batchSize
-    stepsPerEpoch_valid = len(xValid) / batchSize
+    stepsPerEpoch_valid = 0
     #Create the batch generators for the data of the training data nad validation data
     trainingBatchGen = batchGenerator(xxTrain, yData, batchSize, stepsPerEpoch_training)
-    validationBatchGen = batchGenerator(xValid, yData, batchSize, stepsPerEpoch_valid)
+    validationBatchGen = None
+    
+    if (not xValid is None):
+        stepsPerEpoch_valid = len(xValid) / batchSize
+        validationBatchGen = batchGenerator(xValid, yData, batchSize, stepsPerEpoch_valid)
     
     #Train the model by iterativeley pulling data using a generator; NOTE: multiprocessing is used to get data from the generators and put it in a queue for the gpu, use if data fetching is slow
     modelHist = trainedModel.fit(x=trainingBatchGen, validation_data=validationBatchGen, epochs=epochNum, steps_per_epoch=stepsPerEpoch_training, validation_steps=stepsPerEpoch_valid, callbacks=callbacks, max_queue_size=5, workers=3, use_multiprocessing=True)
@@ -911,13 +916,48 @@ def iterativeTrain(model, xTrain, xTest, yData, yMasks):
     #Validation Split
     xxTrain, xVal = trainTestSplit(xTrain,seed=123)
     
+    #Early-stopping
+    earlyStopCallback = keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+    callbacks = [earlyStopCallback]
+    
     scores = {}
     scoreEpoch = {}
     optimizers = ['adadelta', 'adagrad', 'adam', 'adamax', 'ftrl', 'nadam', 'rmsprop']#, 'SGD']     #SGD just returns Nan's for some reason
     lossFuncs = [tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),'poisson','kl_divergence']
     metrics = [['accuracy']]
+    for o in optimizers:
+        for l in lossFuncs:
+            for m in metrics:
+                #Train the model
+                _, modelHist = trainSequence(model, xxTrain, xVal, yData, hyperParams=[o, l, m], batchSize=20, epochNum=30, callbacks=callbacks)
+                
+                #Since we have early stopping, we want to get the epoch at which we had the best score
+                minScore = min(modelHist.history["val_" + m[0]])
+                for i in range(len(modelHist.history["val_" + m[0]])):
+                    if (modelHist.history["val_" + m[0]][i] == minScore):
+                            scoreEpoch[(o, l, m[0])] = i
+                            break
+                            
+                scores[(o, l, m[0])] = minScore
+        
+    #Fetch the best score for the model with which parameters
+    trainingScore = min(scores.values())
+    for k in scores.keys():
+        if (trainingScore == scores[k]):
+            hyperParams = k
+            break
+        
+    print("Finished cross validating!")
     
-    return trainedModel
+    #Train the final model on the best performing hyperparameters
+    print("Reconstructing best model with hyperparameters: [{}, {}, {}]".format(hyperParams[0], hyperParams[1], hyperParams[2]))
+    bestModel = model
+    bestModel.compile(optimizer=hyperParams[0], 
+                         loss=hyperParams[1], 
+                         metrics=[hyperParams[2]])
+    trainedModel, _ = trainSequence(bestModel, xTrain, None, yData, hyperParams=hyperParams, batchSize=20, epochNum=scoreEpoch[hyperParams], callbacks=callbacks)
+    
+    return trainedModel, hyperParams, trainingScore
 
 #Main ###########################################################################
 
