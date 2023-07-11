@@ -262,14 +262,14 @@ def combineMasks(imgDim, masks, detectionList):
         combinedMasks = np.full((len(ANNOTATION_CATEGORIES), imgDim[0], imgDim[1]), False)
         for j in i:
             #Perform a bitwise OR on the proper category of the combined masks array
-            combinedMasks[ANNOTATION_CATEGORIES.index(j[1])] = np.bitwise_or(combinedMasks[ANNOTATION_CATEGORIES.index(j[1])], j[0])
+            combinedMasks[ANNOTATION_CATEGORIES.index(j[1])] = np.bitwise_or(combinedMasks[ANNOTATION_CATEGORIES.index(j[1])], j[0]).astype(float)
         #Transpose mask_expanded_combined to change the format from (60 x imgDimH x imgDimW) to
         #(imgDimH x imgDimW x 60)
         combinedMasks = combinedMasks.transpose(1,2,0)
         
         masks_expanded_combined.append(combinedMasks)
         
-    return masks_expanded_combined.astype(float)
+    return masks_expanded_combined
 
 #Data Fetching ##################################################################
 
@@ -486,7 +486,7 @@ def resizeImg(img, masks, targetH, targetW):
     cntr = 0
     
     for maskArr in masks:
-        print("Mask " + str(cntr))
+        # print("Mask " + str(cntr))
         subRemasks = []
         for mask in maskArr:
             intMask = bool2int(mask.mask)
@@ -745,10 +745,88 @@ def createModel1(inputSize, outputSize):
     
     return model
 
+def createModel2(inputSize, outputSize):
+    '''
+    DO NOT USE
+    Creates a (somewhat) simple CNN model intended for testing
+    Structure:
+        AvgPool -> Conv2d -> Conv2d -> Upsample -> Upsample -> Conv2d -> Reshape
+
+    Parameters
+    ----------
+    inputSize : [int]
+        list or tuple that lists the dimensions of the image in the form:
+            (Height, Width, Channels)
+    outputSize : [int]
+        Size of the output of the model, expected form is:
+            (Height, Width, Classes)
+        Since the data has 60 classes, classes should be 60
+
+    Returns
+    -------
+    model : keras.Model()
+        The constructed machine learning model
+
+    '''
+    model = None
+    
+    inputShape = (inputSize[0], inputSize[1], inputSize[2])
+    
+    Input = layers.Input(inputShape, batch_size=20)
+    
+    AP1 = layers.AveragePooling2D(pool_size=(1265, 449), strides=(1,1))
+    
+    C1 = layers.Conv2D(3, 1001, strides=(1, 1), activation='relu')
+    C2 = layers.Conv2D(60, 760, strides=(10, 10), activation='relu')
+    C3 = layers.Conv2D(60, (737, 1553), strides=(1, 1), activation='softmax')
+    
+    U1 = layers.UpSampling2D(size=(40, 40))
+    U2 = layers.UpSampling2D(size=(4, 4))
+    
+    RSOut = layers.Reshape((outputSize))
+    
+    model = keras.Sequential()
+    model.add(Input)
+    model.add(AP1)
+    model.add(C1)
+    model.add(C2)
+    model.add(U1)
+    model.add(U2)
+    model.add(C3)
+    model.add(RSOut)
+    
+    return model
+
+def createModel3(inputSize, outputSize):
+    model = None
+    
+    inputShape = (inputSize[0], inputSize[1], inputSize[2])
+    
+    Input = layers.Input(inputShape, batch_size=20)
+    
+    AP1 = layers.AveragePooling2D(pool_size=(2265, 1449), strides=(1,1))
+    
+    C1 = layers.Conv2D(1, 501, strides=(1, 1), activation='relu')
+    C2 = layers.Conv2D(60, (365, 399), strides=(1, 1), activation='softmax')
+    
+    U1 = layers.UpSampling2D(size=(24, 24))
+    
+    RSOut = layers.Reshape((outputSize))
+    
+    model = keras.Sequential()
+    model.add(Input)
+    model.add(AP1)
+    model.add(C1)
+    model.add(C2)
+    model.add(U1)
+    model.add(RSOut)
+    
+    return model
+
 def createModel(inputSize, outputSize):
     model = None
     
-    model = createModel1(inputSize, outputSize)
+    model = createModel3(inputSize, outputSize)
     
     return model
 
@@ -796,14 +874,14 @@ def batch_loadImg(xxTrain, yData, index, batchSize, imgDim=(3264,2448)):
         x_dat.append(loadImg(xxTrain[i]))
     #Fetch the masks from the database
     y_dat = getYLabels(x_selected, yData)
-    y_dat_masks = [m.segmentations.detections for m in y_dat]
+    y_dat_detections = [m.segmentations.detections for m in y_dat]
     
     #Preprocess the data before sending to fit
-    x_dat_norm, y_dat_masks_norm = preprocessData(x_dat, y_dat_masks, resizeDim=imgDim)
+    x_dat_norm, y_dat_masks_norm = preprocessData(x_dat, y_dat_detections, resizeDim=imgDim)
     
     #Set xBatchData and combines the masks into a workable format (imgDim x 60)
     xBatchData = combineChannelsInArr(x_dat_norm)
-    yBatchData = combineMasks(imgDim, y_dat_masks_norm, y_dat)
+    yBatchData = combineMasks(imgDim, y_dat_masks_norm, y_dat_detections)
     
     return xBatchData, yBatchData
 
@@ -904,11 +982,11 @@ def trainSequence(model, xxTrain, xValid, yData, hyperParams=['adam',tf.keras.lo
         validationBatchGen = batchGenerator(xValid, yData, batchSize, stepsPerEpoch_valid)
     
     #Train the model by iterativeley pulling data using a generator; NOTE: multiprocessing is used to get data from the generators and put it in a queue for the gpu, use if data fetching is slow
-    modelHist = trainedModel.fit(x=trainingBatchGen, validation_data=validationBatchGen, epochs=epochNum, steps_per_epoch=stepsPerEpoch_training, validation_steps=stepsPerEpoch_valid, callbacks=callbacks, max_queue_size=5, workers=3, use_multiprocessing=True)
+    modelHist = trainedModel.fit(x=trainingBatchGen, validation_data=validationBatchGen, epochs=epochNum, steps_per_epoch=stepsPerEpoch_training, validation_steps=stepsPerEpoch_valid, callbacks=callbacks, max_queue_size=4, workers=3, use_multiprocessing=True)
     
     return trainedModel, modelHist
 
-def iterativeTrain(model, xTrain, xTest, yData, yMasks):
+def iterativeTrain(model, xTrain, xTest, yData):
     trainedModel = None
     hyperParams = []
     trainingScore = 0
@@ -967,13 +1045,13 @@ dataX, dataY = getData()
 #Preprocess - Test
 dataXTrain, dataXTest = trainTestSplit(dataX, 123)
 
-dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/10)])
-dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/10)], dataY)
+# dataXRaw = loadAllImgs(dataXTest[:int(len(dataXTest)/10)])
+# dataYRaw = getYLabels(dataXTest[:int(len(dataXTest)/10)], dataY)
 
-dataYMasks = [m.segmentations.detections for m in dataYRaw]
+# dataYMasks = [m.segmentations.detections for m in dataYRaw]
 # dataYMasks = [(m.segmentations.detections[i].mask for i in range(len(m.segmentations.detections))) for m in dataYRaw]
 
-dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYMasks)
+# dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYMasks)
 
 # dataYRaw_norm_expanded = []
 # for i in range(len(dataYRaw_norm)):
@@ -989,11 +1067,11 @@ dataXRaw_norm, dataYRaw_norm = preprocessData(dataXRaw, dataYMasks)
 #         combinedMasks = np.bitwise_or(combinedMasks, j)
 #     dataYRaw_norm_expanded_combined.append(combinedMasks)
 
-masksCombined = combineMasks((3264,2448), dataYRaw_norm, dataYMasks)
+# masksCombined = combineMasks((3264,2448), dataYRaw_norm, dataYMasks)
 
 #Create the machine learning model
-model = createModel((3264,2448,3), (3264,2448))
-
+model = createModel((3264,2448,3), (3264,2448,60))
+trainedModel, hyperParams, trainingScore = iterativeTrain(model, dataXTrain, dataXTest, dataY)
 
 #Only run this to check data in fiftyone Viewer, cannot be run in a Notebook editor (like Spyder)
 # if __name__ == "__main__":

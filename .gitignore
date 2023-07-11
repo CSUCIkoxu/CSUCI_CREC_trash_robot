@@ -130,3 +130,4 @@ dmypy.json
 
 # Test Folders
 testMasks/
+modelStructures/
