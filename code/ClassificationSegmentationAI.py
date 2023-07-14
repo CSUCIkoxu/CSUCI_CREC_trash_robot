@@ -798,6 +798,27 @@ def createModel2(inputSize, outputSize):
     return model
 
 def createModel3(inputSize, outputSize):
+    '''
+    Creates a machine learning model of Model 3, which consists of the structure:
+        Input->Avg Pool->Conv2d->Conv2d->Upscale->Output
+    Number of Parameters are 9491164
+
+    Parameters
+    ----------
+    inputSize : [int]
+        list or tuple that lists the dimensions of the image in the form:
+            (Height, Width, Channels)
+    outputSize : [int]
+        Size of the output of the model, expected form is:
+            (Height, Width, Classes)
+        Since the data has 60 classes, classes should be 60
+
+    Returns
+    -------
+    model : keras.Model()
+        The constructed machine learning model
+
+    '''
     model = None
     
     inputShape = (inputSize[0], inputSize[1], inputSize[2])
@@ -880,8 +901,8 @@ def batch_loadImg(xxTrain, yData, index, batchSize, imgDim=(3264,2448)):
     x_dat_norm, y_dat_masks_norm = preprocessData(x_dat, y_dat_detections, resizeDim=imgDim)
     
     #Set xBatchData and combines the masks into a workable format (imgDim x 60)
-    xBatchData = combineChannelsInArr(x_dat_norm)
-    yBatchData = combineMasks(imgDim, y_dat_masks_norm, y_dat_detections)
+    xBatchData = np.array(combineChannelsInArr(x_dat_norm))
+    yBatchData = np.array(combineMasks(imgDim, y_dat_masks_norm, y_dat_detections))
     
     return xBatchData, yBatchData
 
@@ -966,7 +987,7 @@ def trainSequence(model, xxTrain, xValid, yData, hyperParams=['adam',tf.keras.lo
     
     print("Model training on : [{}, {}, {}]".format(hyperParams[0], hyperParams[1], hyperParams[2]))
     
-    #Create the current itereaetion of the training model
+    #Create the current iteration of the training model
     trainedModel = keras.models.clone_model(model)
     trainedModel.compile(optimizer=hyperParams[0], loss=hyperParams[1], metrics=hyperParams[2])
     
